@@ -1,0 +1,19 @@
+{
+  "form_url": "https://forms.gle/TjsazDULUdwCf1QU9",
+  "questions": [
+    {
+      "type": "radio",
+      "xpath": "//div[@role='radio' and @data-value='Trường Đại học thuộc ĐHQG']",
+      "prompt": null,
+      "action": "click",
+      "comment": "Câu: Bạn đã hay đang học Trường Đại học nào?"
+    },
+    {
+      "type": "radio",
+      "xpath": "//div[@role='radio' and @data-value='Sinh viên năm 3-4']",
+      "prompt": null,
+      "action": "click",
+      "comment": "Câu: Bạn hiện đang là?"
+    }
+  ]
+}

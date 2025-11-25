@@ -1,0 +1,123 @@
+{
+  "form_url": "https://forms.gle/TjsazDULUdwCf1QU9",
+  "sections": [
+    [
+      {
+        "type": "radio",
+        "xpath": "//div[@data-value='Trường Đại học thuộc ĐHQG']",
+        "prompt": null,
+        "comment": "Section 1: University type"
+      },
+      {
+        "type": "radio",
+        "xpath": "//div[@data-value='Sinh viên năm 3-4']",
+        "prompt": null,
+        "comment": "Section 1: Current status - this determines next section"
+      }
+    ],
+    [
+      {
+        "type": "radio",
+        "xpath": "//div[@data-value='Năm 3']",
+        "prompt": null,
+        "comment": "Section 2 (Year 3-4 students): Current year"
+      },
+      {
+        "type": "text",
+        "xpath": "//div[contains(text(), 'Năm mà bạn dự kiến tốt nghiệp là?')]//ancestor::div[@role='listitem']//input[@type='text']",
+        "prompt": "Generate a year between 2025-2027",
+        "comment": "Expected graduation year"
+      },
+      {
+        "type": "radio",
+        "xpath": "//div[@data-value='Đi làm']",
+        "prompt": null,
+        "comment": "Post-graduation plan"
+      },
+      {
+        "type": "checkbox",
+        "xpath": "//div[@data-answer-value='Website trường']",
+        "prompt": null,
+        "comment": "Information sources"
+      },
+      {
+        "type": "checkbox",
+        "xpath": "//div[@data-answer-value='Facebook nhóm']",
+        "prompt": null,
+        "comment": "Information sources"
+      },
+            {
+        "type": "checkbox",
+        "xpath": "//div[@data-answer-value='Recognition/badge cho mentor']",
+        "prompt": null,
+        "comment": "Information sources"
+      },
+        {
+        "type": "checkbox",
+        "xpath": "//div[@data-answer-value='Không có kinh nghiệm thực tế để ứng tuyển (Viết CV, Mock interview,...)']",
+        "prompt": null,
+        "comment": "Information sources"
+      },
+      {
+        "type": "scale",
+        "xpath": "//div[@data-value='5 - Rất quan tâm' and contains(@aria-label, 'chat bot')]",
+        "prompt": null,
+        "comment": "Rating for chatbot feature"
+      },
+      {
+        "type": "scale",
+        "xpath": "//div[@data-value='5 - Rất quan tâm' and contains(@aria-label, 'forum')]",
+        "prompt": null,
+        "comment": "Rating for forum feature"
+      },
+            {
+        "type": "scale",
+        "xpath": "//div[@data-value='5 - Rất quan tâm' and contains(@aria-label, 'forum')]",
+        "prompt": null,
+        "comment": "Rating for forum feature"
+      },
+            {
+        "type": "scale",
+        "xpath": "//div[@data-value='5 - Rất quan tâm' and contains(@aria-label, 'forum')]",
+        "prompt": null,
+        "comment": "Rating for forum feature"
+      },
+            {
+        "type": "scale",
+        "xpath": "//div[@data-value='5 - Rất quan tâm' and contains(@aria-label, 'forum')]",
+        "prompt": null,
+        "comment": "Rating for forum feature"
+      },
+            {
+        "type": "scale",
+        "xpath": "//div[@data-value='5 - Rất quan tâm' and contains(@aria-label, 'forum')]",
+        "prompt": null,
+        "comment": "Rating for forum feature"
+      },
+            {
+        "type": "scale",
+        "xpath": "//div[@data-value='5 - Rất quan tâm' and contains(@aria-label, 'forum')]",
+        "prompt": null,
+        "comment": "Rating for forum feature"
+      },
+            {
+        "type": "scale",
+        "xpath": "//div[@data-value='5 - Rất quan tâm' and contains(@aria-label, 'forum')]",
+        "prompt": null,
+        "comment": "Rating for forum feature"
+      },
+      {
+        "type": "textarea",
+        "xpath": "//textarea[@aria-label='Additional features']",
+        "prompt": "Write 2-3 sentences about what features would help year 3-4 students prepare for graduation",
+        "comment": "Suggestions for additional features"
+      },
+      {
+        "type": "text",
+        "xpath": "//input[@type='email']",
+        "prompt": "Generate a random Vietnamese email address",
+        "comment": "Email for newsletter"
+      }
+    ]
+  ]
+}
