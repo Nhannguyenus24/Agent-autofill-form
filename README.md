@@ -1,31 +1,31 @@
-# 🤖 Google Form Autofill với Gemini AI
+# 🤖 Google Form Autofill with Gemini AI
 
-Chương trình tự động điền Google Form sử dụng Selenium và Gemini AI để tạo câu trả lời thông minh.
+Automatically fill Google Forms using Selenium and Gemini AI to generate smart answers.
 
-## 📋 Yêu cầu
+## 📋 Requirements
 
 - Python 3.7+
 - Chrome Browser
 - ChromeDriver
 - Gemini API Key
 
-## 🔧 Cài đặt
+## 🔧 Installation
 
-1. **Cài đặt thư viện:**
+1. **Install dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
 
-2. **Tải ChromeDriver:**
-   - Tải từ: https://chromedriver.chromium.org/
-   - Đặt vào thư mục dự án hoặc đường dẫn hệ thống
+2. **Download ChromeDriver:**
+   - Download from: https://chromedriver.chromium.org/
+   - Place in project folder or system path
 
-3. **Lấy Gemini API Key:**
-   - Truy cập: https://makersuite.google.com/app/apikey
-   - Tạo API key mới
-   - Copy API key
+3. **Get Gemini API Key:**
+   - Visit: https://makersuite.google.com/app/apikey
+   - Create a new API key
+   - Copy the API key
 
-## ⚙️ Cấu hình
+## ⚙️ Configuration
 
 ### 1. File `config.json`
 
@@ -37,9 +37,9 @@ pip install -r requirements.txt
 }
 ```
 
-Thay thế:
-- `YOUR_GEMINI_API_KEY_HERE` bằng API key của bạn
-- `path/to/chromedriver.exe` bằng đường dẫn đến ChromeDriver
+Replace:
+- `YOUR_GEMINI_API_KEY_HERE` with your API key
+- `path/to/chromedriver.exe` with the path to ChromeDriver
 
 ### 2. File `questions.json`
 
@@ -50,36 +50,36 @@ Thay thế:
     {
       "type": "text",
       "xpath": "//input[@type='text' and @aria-labelledby='i1']",
-      "prompt": "Tạo một tên người Việt Nam ngẫu nhiên"
+      "prompt": "Generate a random Vietnamese name"
     }
   ]
 }
 ```
 
-**Các loại câu hỏi hỗ trợ:**
+**Supported question types:**
 
-- `text`: Text field đơn giản
-- `textarea`: Text area (câu trả lời dài)
-- `radio`: Radio button (chọn 1)
-- `checkbox`: Checkbox (chọn nhiều)
+- `text`: Simple text field
+- `textarea`: Text area (long answer)
+- `radio`: Radio button (single choice)
+- `checkbox`: Checkbox (multiple choice)
 
-**Cách lấy XPath:**
+**How to get XPath:**
 
-1. Mở Google Form trong Chrome
-2. Nhấn F12 để mở DevTools
-3. Click vào icon "Select element"
-4. Click vào trường cần lấy XPath
-5. Right-click vào element trong DevTools → Copy → Copy XPath
+1. Open Google Form in Chrome
+2. Press F12 to open DevTools
+3. Click "Select element" icon
+4. Click on the field to get XPath
+5. Right-click element in DevTools → Copy → Copy XPath
 
-## 🚀 Chạy chương trình
+## 🚀 Running the Program
 
 ```bash
 python main.py
 ```
 
-## 📝 Ví dụ sử dụng
+## 📝 Usage Examples
 
-### Ví dụ 1: Form đăng ký khóa học
+### Example 1: Course registration form
 
 ```json
 {
@@ -87,22 +87,22 @@ python main.py
   "questions": [
     {
       "type": "text",
-      "xpath": "//input[@aria-label='Họ và tên']",
-      "prompt": "Tạo một tên người Việt Nam"
+      "xpath": "//input[@aria-label='Name']",
+      "prompt": "Generate a Vietnamese name"
     },
     {
       "type": "text",
       "xpath": "//input[@type='email']",
-      "prompt": "Tạo một email ngẫu nhiên"
+      "prompt": "Generate a random email"
     },
     {
       "type": "textarea",
-      "xpath": "//textarea[@aria-label='Lý do tham gia']",
-      "prompt": "Viết 2-3 câu về lý do muốn học lập trình Python"
+      "xpath": "//textarea[@aria-label='Why are you joining']",
+      "prompt": "Write 2-3 sentences about wanting to learn Python programming"
     },
     {
       "type": "radio",
-      "xpath": "//div[@data-value='18-25 tuổi']",
+      "xpath": "//div[@data-value='18-25 years old']",
       "prompt": null,
       "action": "click"
     }
@@ -110,55 +110,55 @@ python main.py
 }
 ```
 
-## 🎯 Tính năng
+## 🎯 Features
 
-✅ Tự động điền text field với AI  
-✅ Tự động điền textarea với câu trả lời dài  
-✅ Tự động click radio button  
-✅ Tự động click checkbox  
-✅ Tự động submit form  
-✅ Xử lý lỗi thông minh  
+✅ Auto-fill text fields with AI  
+✅ Auto-fill textarea with long answers  
+✅ Auto-click radio buttons  
+✅ Auto-click checkboxes  
+✅ Auto-submit form  
+✅ Smart error handling  
 
-## ⚠️ Lưu ý
+## ⚠️ Notes
 
-- Chỉ sử dụng cho mục đích hợp pháp và có sự đồng ý
-- Không spam hoặc lạm dụng Google Forms
-- Kiểm tra XPath trước khi chạy
-- API Gemini có giới hạn requests
+- Use only for lawful purposes with proper authorization
+- Do not spam or abuse Google Forms
+- Verify XPath before running
+- Gemini API has rate limits
 
-## 🐛 Xử lý lỗi thường gặp
+## 🐛 Troubleshooting
 
-**Lỗi: ChromeDriver version không khớp**
+**Error: ChromeDriver version mismatch**
 ```
-Tải đúng phiên bản ChromeDriver với Chrome browser của bạn
-```
-
-**Lỗi: Không tìm thấy element**
-```
-Kiểm tra lại XPath trong file questions.json
+Download the correct ChromeDriver version matching your Chrome browser version
 ```
 
-**Lỗi: Gemini API key không hợp lệ**
+**Error: Element not found**
 ```
-Kiểm tra lại API key trong config.json
+Verify the XPath in questions.json is correct
 ```
 
-## 📄 Cấu trúc dự án
+**Error: Gemini API key invalid**
+```
+Verify your API key in config.json
+```
+
+## 📄 Project Structure
 
 ```
 Autofill-googleform/
-├── main.py              # File chính
-├── config.json          # Cấu hình API và ChromeDriver
-├── questions.json       # Định nghĩa câu hỏi form
-├── requirements.txt     # Thư viện Python
-├── README.md           # File này
-└── python.py           # Demo cũ (có thể xóa)
+├── main.py              # Main file
+├── config.json          # API and ChromeDriver config
+├── questions.json       # Form questions definition
+├── requirements.txt     # Python dependencies
+├── README.md           # This file
+└── python.py           # Old demo (can be deleted)
 ```
 
-## 🤝 Đóng góp
+## 🤝 Contributing
 
-Mọi đóng góp đều được chào đón! Hãy tạo Pull Request hoặc Issue.
+All contributions are welcome! Please create Pull Requests or Issues.
 
-## 📧 Liên hệ
+## 📧 Contact
 
-Nếu có câu hỏi, vui lòng tạo Issue trên GitHub.
+If you have questions, please create an Issue on GitHub.

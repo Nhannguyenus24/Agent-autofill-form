@@ -1,3 +1,8 @@
+"""
+Smart Google Form Autofill with Gemini AI - Version 2
+Auto-detects form structure and fills with AI-generated answers
+"""
+
 import json
 import time
 import google.generativeai as genai
@@ -9,41 +14,37 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 
 class SmartGoogleFormAutofill:
+    """Smart form autofill using Gemini AI"""
+    
     def __init__(self, config_file='config.json'):
-        """Initialize with config file only - no questions file needed"""
-        # Load config
+        """Initialize with config file"""
         with open(config_file, 'r', encoding='utf-8') as f:
             self.config = json.load(f)
         
-        # Configure Gemini API
         genai.configure(api_key=self.config['gemini_api_key'])
         self.model = genai.GenerativeModel('gemini-2.5-flash')
         
-        # Initialize Chrome WebDriver
         from selenium.webdriver.chrome.service import Service
         service = Service(executable_path=self.config['chromedriver_path'])
         self.driver = webdriver.Chrome(service=service)
         self.wait = WebDriverWait(self.driver, 10)
-        
         self.form_structure = []
+        self.answer_history = []  # Store Q&A pairs for context
     
     def extract_form_structure(self):
-        """Extract all questions and options from the current form page"""
+        """Extract all questions and options from form"""
         print("\n🔍 Analyzing form structure...")
         
         try:
-            # Find all question containers
             questions = self.driver.find_elements(By.CSS_SELECTOR, "div[role='listitem']")
-            
             form_data = []
             
             for idx, question_elem in enumerate(questions, 1):
                 try:
-                    # Get question text
                     try:
                         question_text = question_elem.find_element(By.CSS_SELECTOR, ".M7eMe").text
                     except Exception as e:
-                        print(f"⚠ Q{idx}: Cannot find question text - {type(e).__name__}: {str(e)[:80]}")
+                        print(f"⚠ Q{idx}: Cannot find question - {type(e).__name__}")
                         continue
                     
                     if not question_text:
@@ -57,12 +58,9 @@ class SmartGoogleFormAutofill:
                         "element": question_elem
                     }
                     
-                    # Detect question type and get options
-                    
-                    # Check for matrix/grid questions FIRST (multiple radiogroups)
+                    # Detect matrix/grid questions (multiple radiogroups)
                     radiogroups = question_elem.find_elements(By.CSS_SELECTOR, "div[role='radiogroup']")
                     if len(radiogroups) > 1:
-                        # This is a matrix question (grid with multiple rows)
                         question_info["type"] = "matrix"
                         question_info["rows"] = []
                         
@@ -77,13 +75,13 @@ class SmartGoogleFormAutofill:
                                         "options": row_options
                                     })
                             except Exception as e:
-                                print(f"   ⚠ Error parsing matrix row: {str(e)[:50]}")
+                                print(f"   ⚠ Matrix row error: {str(e)[:50]}")
                         
                         if question_info["rows"]:
                             form_data.append(question_info)
                         continue
                     
-                    # Check for radio buttons (single choice)
+                    # Detect radio buttons
                     radio_options = question_elem.find_elements(By.CSS_SELECTOR, "div[role='radio']")
                     if radio_options:
                         question_info["type"] = "radio"
@@ -102,7 +100,7 @@ class SmartGoogleFormAutofill:
                         form_data.append(question_info)
                         continue
                     
-                    # Check for checkboxes
+                    # Detect checkboxes
                     checkbox_options = question_elem.find_elements(By.CSS_SELECTOR, "div[role='checkbox']")
                     if checkbox_options:
                         question_info["type"] = "checkbox"
@@ -121,21 +119,21 @@ class SmartGoogleFormAutofill:
                         form_data.append(question_info)
                         continue
                     
-                    # Check for text input (after radio/checkbox to avoid "Other" field confusion)
+                    # Detect text input
                     text_inputs = question_elem.find_elements(By.CSS_SELECTOR, "input[type='text']")
                     if text_inputs:
                         question_info["type"] = "text"
                         form_data.append(question_info)
                         continue
                     
-                    # Check for email input
+                    # Detect email input
                     email_inputs = question_elem.find_elements(By.CSS_SELECTOR, "input[type='email']")
                     if email_inputs:
                         question_info["type"] = "email"
                         form_data.append(question_info)
                         continue
                     
-                    # Check for textarea
+                    # Detect textarea
                     textareas = question_elem.find_elements(By.CSS_SELECTOR, "textarea")
                     if textareas:
                         question_info["type"] = "textarea"
@@ -143,11 +141,7 @@ class SmartGoogleFormAutofill:
                         continue
                     
                 except Exception as e:
-                    import traceback
-                    print(f"⚠ Error parsing question {idx}:")
-                    print(f"   Type: {type(e).__name__}")
-                    print(f"   Message: {str(e)[:100]}")
-                    print(f"   Details: {traceback.format_exc()[:200]}")
+                    print(f"⚠ Error parsing Q{idx}: {type(e).__name__}")
                     continue
             
             return form_data
@@ -156,50 +150,64 @@ class SmartGoogleFormAutofill:
             print(f"❌ Error extracting form: {e}")
             return []
     
+    def build_context_string(self):
+        """Build context string from answer history"""
+        if not self.answer_history:
+            return ""
+        
+        context = "\n📋 Form Context (Previous Answers):\n"
+        for qa in self.answer_history[-10:]:  # Keep last 10 Q&A for context
+            context += f"Q: {qa['question'][:80]}...\nA: {qa['answer']}\n\n"
+        return context
+    
     def ask_gemini_for_choice(self, question_text, options, question_type):
-        """Ask Gemini to choose the best option or generate content"""
+        """Ask Gemini for answer or choice with context"""
+        context = self.build_context_string()
         
         if question_type in ["text", "email", "textarea"]:
-            # Generate content
-            prompt = f"""You are filling out a Google Form survey. 
-Question: {question_text}
+            prompt = f"""You are filling out a Google Form intelligently.
+{context}
+Current Question: {question_text}
 
-Please provide a realistic and appropriate answer in Vietnamese if the question is in Vietnamese, otherwise in English.
-Keep it concise and natural. For years, use format YYYY.
-Just give the answer, no explanation."""
+Provide a realistic, concise answer in Vietnamese if the form is in Vietnamese, else in English.
+For dates, use YYYY format.
+Make answer consistent with previous context if applicable.
+Answer only, no explanation."""
             
         elif question_type == "radio":
-            # Choose one option
             options_text = "\n".join([f"{i+1}. {opt['text']}" for i, opt in enumerate(options)])
-            prompt = f"""You are filling out a Google Form survey.
-Question: {question_text}
+            prompt = f"""You are filling out a Google Form intelligently.
+{context}
+Current Question: {question_text}
 
-Available options:
+Options:
 {options_text}
 
-Choose the MOST APPROPRIATE option by responding with ONLY the option number (1, 2, 3, etc.).
-No explanation needed, just the number."""
+Choose the MOST APPROPRIATE option considering previous answers for consistency.
+Respond with ONLY the number (1, 2, 3, etc.)."""
             
         elif question_type == "checkbox":
-            # Choose multiple options
             options_text = "\n".join([f"{i+1}. {opt['text']}" for i, opt in enumerate(options)])
-            prompt = f"""You are filling out a Google Form survey.
-Question: {question_text}
+            prompt = f"""You are filling out a Google Form intelligently.
+{context}
+Current Question: {question_text}
 
-Available options:
+Options:
 {options_text}
 
-Choose ONE OR MORE appropriate options. Respond with comma-separated numbers (e.g., "1,3,4").
-Just the numbers, no explanation."""
+Choose appropriate options for consistency with previous answers.
+Respond with comma-separated numbers (e.g., "1,3,4").
+Only numbers, no explanation."""
             
         elif question_type in ["scale", "matrix"]:
-            # Choose rating
-            prompt = f"""You are filling out a Google Form survey.
-Question: {question_text}
+            prompt = f"""You are filling out a Google Form intelligently.
+{context}
+Current Question: {question_text}
 
-This is a rating scale question (typically 1-5 where 1=lowest, 5=highest).
-Choose an appropriate rating number. Respond with ONLY the number.
-Generally lean towards positive ratings (4 or 5) unless the question suggests otherwise."""
+This is a rating scale (1-5: 1=lowest, 5=highest).
+Choose an appropriate rating consistent with previous answers.
+Respond with ONLY the number.
+Generally prefer positive ratings (4-5) unless context suggests otherwise."""
         
         else:
             return None
@@ -207,14 +215,14 @@ Generally lean towards positive ratings (4 or 5) unless the question suggests ot
         try:
             response = self.model.generate_content(prompt)
             answer = response.text.strip()
-            print(f"   🤖 Gemini suggests: {answer}")
+            print(f"   🤖 Gemini: {answer}")
             return answer
         except Exception as e:
             print(f"   ⚠ Gemini error: {e}")
             return None
     
     def fill_question(self, question_info):
-        """Fill a single question based on Gemini's suggestion"""
+        """Fill a single question"""
         print(f"\n📝 Q{question_info['index']}: {question_info['question'][:60]}...")
         print(f"   Type: {question_info['type']}")
         
@@ -230,6 +238,12 @@ Generally lean towards positive ratings (4 or 5) unless the question suggests ot
                     input_elem.clear()
                     input_elem.send_keys(answer)
                     print(f"   ✓ Filled: {answer}")
+                    # Store in history
+                    self.answer_history.append({
+                        "question": question_info['question'],
+                        "answer": answer,
+                        "type": question_info['type']
+                    })
                     time.sleep(0.5)
                     return True
             
@@ -244,6 +258,12 @@ Generally lean towards positive ratings (4 or 5) unless the question suggests ot
                     textarea_elem.clear()
                     textarea_elem.send_keys(answer)
                     print(f"   ✓ Filled: {answer[:50]}...")
+                    # Store in history
+                    self.answer_history.append({
+                        "question": question_info['question'],
+                        "answer": answer,
+                        "type": "textarea"
+                    })
                     time.sleep(0.5)
                     return True
             
@@ -259,30 +279,13 @@ Generally lean towards positive ratings (4 or 5) unless the question suggests ot
                         selected_option = question_info['options'][idx]
                         selected_option['element'].click()
                         print(f"   ✓ Selected: {selected_option['text']}")
+                        # Store in history
+                        self.answer_history.append({
+                            "question": question_info['question'],
+                            "answer": selected_option['text'],
+                            "type": "radio"
+                        })
                         time.sleep(0.5)
-                        
-                        # Check if this is "Other" option that needs text input
-                        if selected_option['text'] == '__other_option__' or 'Other' in selected_option['text']:
-                            try:
-                                # Find the text input field that appears after clicking Other
-                                time.sleep(0.5)
-                                other_input = question_info['element'].find_element(By.CSS_SELECTOR, "input[type='text']")
-                                
-                                # Ask Gemini for custom text
-                                other_text = self.ask_gemini_for_choice(
-                                    f"{question_info['question']} (Other option - provide specific answer)",
-                                    [],
-                                    'text'
-                                )
-                                
-                                if other_text:
-                                    other_input.clear()
-                                    other_input.send_keys(other_text)
-                                    print(f"   ✓ Other text filled: {other_text}")
-                                    time.sleep(0.5)
-                            except Exception as e:
-                                print(f"   ⚠ Could not fill Other text: {str(e)[:50]}")
-                        
                         return True
             
             elif question_info['type'] == 'checkbox':
@@ -293,8 +296,6 @@ Generally lean towards positive ratings (4 or 5) unless the question suggests ot
                 )
                 if choices:
                     selected = []
-                    has_other = False
-                    
                     for choice in choices.split(','):
                         choice = choice.strip()
                         if choice.isdigit():
@@ -303,56 +304,21 @@ Generally lean towards positive ratings (4 or 5) unless the question suggests ot
                                 selected_option = question_info['options'][idx]
                                 selected_option['element'].click()
                                 selected.append(selected_option['text'])
-                                
-                                # Check if this is Other option
-                                if selected_option['text'] == '__other_option__' or 'Other' in selected_option['text']:
-                                    has_other = True
-                                
                                 time.sleep(0.3)
                     
                     if selected:
                         print(f"   ✓ Selected: {', '.join(selected)}")
-                        
-                        # Fill Other text if needed
-                        if has_other:
-                            try:
-                                time.sleep(0.5)
-                                other_input = question_info['element'].find_element(By.CSS_SELECTOR, "input[type='text']")
-                                
-                                other_text = self.ask_gemini_for_choice(
-                                    f"{question_info['question']} (Other option - provide specific answer)",
-                                    [],
-                                    'text'
-                                )
-                                
-                                if other_text:
-                                    other_input.clear()
-                                    other_input.send_keys(other_text)
-                                    print(f"   ✓ Other text filled: {other_text}")
-                                    time.sleep(0.5)
-                            except Exception as e:
-                                print(f"   ⚠ Could not fill Other text: {str(e)[:50]}")
-                        
+                        # Store in history
+                        self.answer_history.append({
+                            "question": question_info['question'],
+                            "answer": ", ".join(selected),
+                            "type": "checkbox"
+                        })
                         return True
             
-            elif question_info['type'] == 'scale':
-                rating = self.ask_gemini_for_choice(
-                    question_info['question'],
-                    question_info['options'],
-                    'scale'
-                )
-                if rating and rating.isdigit():
-                    # Find option with matching value
-                    for opt in question_info['options']:
-                        if opt['value'] == rating:
-                            opt['element'].click()
-                            print(f"   ✓ Rated: {rating}")
-                            time.sleep(0.5)
-                            return True
-            
             elif question_info['type'] == 'matrix':
-                # Fill all rows with ratings
                 print(f"   📊 Matrix with {len(question_info['rows'])} rows")
+                ratings = []
                 
                 for row_idx, row in enumerate(question_info['rows'], 1):
                     try:
@@ -366,21 +332,24 @@ Generally lean towards positive ratings (4 or 5) unless the question suggests ot
                             idx = int(rating) - 1
                             if 0 <= idx < len(row['options']):
                                 row['options'][idx].click()
-                                print(f"   ✓ Row {row_idx}/{len(question_info['rows'])}: {row['label'][:40]} → {rating}")
+                                print(f"   ✓ Row {row_idx}: {row['label'][:40]} → {rating}")
+                                ratings.append(f"{row['label']}: {rating}")
                                 time.sleep(0.3)
-                            else:
-                                print(f"   ⚠ Row {row_idx}: Rating {rating} out of range (1-{len(row['options'])})")
-                        else:
-                            print(f"   ⚠ Row {row_idx}: Invalid rating from Gemini: {rating}")
-                            
+                        
                     except Exception as e:
-                        print(f"   ✗ Row {row_idx} error: {type(e).__name__} - {str(e)[:60]}")
-                        continue
+                        print(f"   ✗ Row {row_idx} error: {str(e)[:60]}")
                 
+                # Store in history
+                if ratings:
+                    self.answer_history.append({
+                        "question": question_info['question'],
+                        "answer": "; ".join(ratings),
+                        "type": "matrix"
+                    })
                 return True
             
         except Exception as e:
-            print(f"   ✗ Error filling question: {str(e)[:100]}")
+            print(f"   ✗ Error: {str(e)[:100]}")
             return False
         
         return False
@@ -388,35 +357,68 @@ Generally lean towards positive ratings (4 or 5) unless the question suggests ot
     def click_next_or_submit(self):
         """Click Next or Submit button"""
         try:
-            # Try Next button first
+            # Next/Continue button selectors (various languages & variations)
             next_selectors = [
                 "//span[contains(text(), 'Next')]/..",
+                "//span[contains(text(), 'next')]/..",
                 "//span[contains(text(), 'Tiếp')]/..",
+                "//span[contains(text(), 'Continue')]/..",
+                "//span[contains(text(), 'continue')]/..",
+                "//span[contains(text(), 'Tiếp tục')]/..",
+                "//span[contains(text(), 'Next page')]/..",
+                "//span[contains(text(), 'Forward')]/..",
+                "//span[contains(text(), 'forward')]/..",
+                "//button[contains(text(), 'Next')]",
+                "//button[contains(text(), 'next')]",
+                "//button[contains(text(), 'Continue')]",
+                "//button[contains(text(), 'continue')]",
+                "//a[contains(text(), 'Next')]",
+                "//a[contains(text(), 'Continue')]",
             ]
             
             for selector in next_selectors:
                 try:
                     btn = self.driver.find_element(By.XPATH, selector)
-                    btn.click()
-                    print("\n➡️  Clicked Next")
-                    time.sleep(2)
-                    return "next"
+                    if btn.is_displayed() and btn.is_enabled():
+                        btn.click()
+                        print("\n➡️  Clicked Next/Continue")
+                        time.sleep(2)
+                        return "next"
                 except:
                     continue
             
-            # Try Submit button
+            # Submit/Send button selectors (various languages & variations)
             submit_selectors = [
                 "//span[contains(text(), 'Submit')]/..",
+                "//span[contains(text(), 'submit')]/..",
                 "//span[contains(text(), 'Gửi')]/..",
+                "//span[contains(text(), 'Send')]/..",
+                "//span[contains(text(), 'send')]/..",
+                "//span[contains(text(), 'Finish')]/..",
+                "//span[contains(text(), 'finish')]/..",
+                "//span[contains(text(), 'OK')]/..",
+                "//span[contains(text(), 'ok')]/..",
+                "//span[contains(text(), 'Done')]/..",
+                "//span[contains(text(), 'done')]/..",
+                "//span[contains(text(), 'Xác nhận')]/..",
+                "//span[contains(text(), 'Gửi phản hồi')]/..",
+                "//button[contains(text(), 'Submit')]",
+                "//button[contains(text(), 'submit')]",
+                "//button[contains(text(), 'Send')]",
+                "//button[contains(text(), 'Finish')]",
+                "//button[contains(text(), 'OK')]",
+                "//a[contains(text(), 'Submit')]",
+                "//a[contains(text(), 'Send')]",
             ]
             
             for selector in submit_selectors:
                 try:
                     btn = self.driver.find_element(By.XPATH, selector)
-                    btn.click()
-                    print("\n✅ Clicked Submit")
-                    time.sleep(3)
-                    return "submit"
+                    if btn.is_displayed() and btn.is_enabled():
+                        btn.click()
+                        print("\n✅ Clicked Submit")
+                        time.sleep(3)
+                        return "submit"
                 except:
                     continue
             
@@ -428,7 +430,7 @@ Generally lean towards positive ratings (4 or 5) unless the question suggests ot
             return None
     
     def fill_form_smart(self, form_url):
-        """Smart fill entire form by analyzing structure"""
+        """Fill entire form by analyzing structure"""
         try:
             print(f"🌐 Opening form: {form_url}")
             self.driver.get(form_url)
@@ -439,21 +441,20 @@ Generally lean towards positive ratings (4 or 5) unless the question suggests ot
                 print(f"\n{'='*60}")
                 print(f"📄 SECTION {section}")
                 print(f"{'='*60}")
+                if self.answer_history:
+                    print(f"📝 Current history: {len(self.answer_history)} Q&A pairs")
                 
-                # Extract current page structure
                 form_data = self.extract_form_structure()
                 
                 if not form_data:
-                    print("⚠ No questions found on this page")
+                    print("⚠ No questions found")
                     break
                 
                 print(f"\n✓ Found {len(form_data)} questions")
                 
-                # Fill each question
                 for question in form_data:
                     self.fill_question(question)
                 
-                # Try to proceed to next section or submit
                 action = self.click_next_or_submit()
                 
                 if action == "submit":
@@ -463,7 +464,6 @@ Generally lean towards positive ratings (4 or 5) unless the question suggests ot
                     section += 1
                     time.sleep(1.5)
                 else:
-                    print("\n⚠ Reached end of form or manual action needed")
                     break
             
             print("\n✅ Process complete!")
@@ -475,20 +475,29 @@ Generally lean towards positive ratings (4 or 5) unless the question suggests ot
             time.sleep(5)
     
     def close(self):
-        """Close browser"""
+        """Close browser and show summary"""
+        if self.answer_history:
+            print("\n" + "="*60)
+            print("📊 FORM SUBMISSION SUMMARY")
+            print("="*60)
+            print(f"Total answers provided: {len(self.answer_history)}")
+            for idx, qa in enumerate(self.answer_history, 1):
+                print(f"\n{idx}. {qa['question'][:70]}...")
+                print(f"   Answer: {qa['answer'][:80]}")
+        
         self.driver.quit()
-        print("Browser closed")
+        print("\nBrowser closed")
 
 
 def main():
-    """Main function for V2"""
+    """Main function"""
     print("=" * 60)
-    print("🤖 SMART GOOGLE FORM AUTOFILL V2 - AI POWERED")
+    print("🤖 SMART GOOGLE FORM AUTOFILL V2")
     print("=" * 60)
-    print("\n✨ Version 2 Features:")
+    print("\n✨ Features:")
     print("  • Auto-detects all form questions")
-    print("  • AI chooses best answers")
-    print("  • No manual question configuration needed")
+    print("  • AI chooses best answers with Gemini")
+    print("  • No manual configuration needed")
     print("=" * 60)
     
     form_url = input("\n📝 Enter Google Form URL: ").strip()

@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def get_chrome_version():
-    """Lấy phiên bản Chrome đang cài"""
+    """Get installed Chrome version"""
     try:
         # Thử lệnh Windows
         result = subprocess.run(
@@ -36,21 +36,21 @@ def get_chrome_version():
     except:
         pass
     
-    print("⚠️  Không thể tự động phát hiện phiên bản Chrome")
-    version = input("Nhập phiên bản Chrome của bạn (VD: 119.0.6045.105): ")
+    print("⚠️  Unable to auto-detect Chrome version")
+    version = input("Enter your Chrome version (e.g., 119.0.6045.105): ")
     return version
 
 
 def get_chromedriver_download_url(chrome_version):
-    """Lấy URL download ChromeDriver phù hợp"""
+    """Get appropriate ChromeDriver download URL"""
     try:
-        # Lấy major version (VD: 119 từ 119.0.6045.105)
+        # Get major version (e.g., 119 from 119.0.6045.105)
         major_version = chrome_version.split('.')[0]
         
-        # API mới của Chrome for Testing
+        # Chrome for Testing API
         api_url = "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json"
         
-        print(f"🔍 Đang tìm ChromeDriver cho Chrome version {chrome_version}...")
+        print(f"🔍 Finding ChromeDriver for Chrome version {chrome_version}...")
         response = requests.get(api_url, timeout=10)
         response.raise_for_status()
         
@@ -64,25 +64,25 @@ def get_chromedriver_download_url(chrome_version):
                     if download['platform'] == 'win64':
                         return download['url'], version_info['version']
         
-        # Nếu không tìm thấy, thử version mới nhất
-        print(f"⚠️  Không tìm thấy ChromeDriver cho version {major_version}, thử version mới nhất...")
+        # If not found, try latest version
+        print(f"⚠️  ChromeDriver not found for version {major_version}, trying latest...")
         latest = data['versions'][-1]
         downloads = latest.get('downloads', {}).get('chromedriver', [])
         for download in downloads:
             if download['platform'] == 'win64':
                 return download['url'], latest['version']
         
-        raise Exception("Không tìm thấy ChromeDriver phù hợp")
+        raise Exception("No suitable ChromeDriver found")
         
     except Exception as e:
-        print(f"❌ Lỗi: {e}")
+        print(f"❌ Error: {e}")
         return None, None
 
 
 def download_chromedriver(url, version):
-    """Tải ChromeDriver"""
+    """Download ChromeDriver"""
     try:
-        print(f"📥 Đang tải ChromeDriver {version}...")
+        print(f"📥 Downloading ChromeDriver {version}...")
         
         response = requests.get(url, stream=True, timeout=30)
         response.raise_for_status()
@@ -98,46 +98,46 @@ def download_chromedriver(url, version):
                     downloaded += len(chunk)
                     if total_size > 0:
                         percent = (downloaded / total_size) * 100
-                        print(f"\r⏳ Đang tải: {percent:.1f}%", end='')
+                        print(f"\r⏳ Downloading: {percent:.1f}%", end='')
         
-        print("\n✅ Tải xuống hoàn tất!")
+        print("\n✅ Download complete!")
         return zip_path
         
     except Exception as e:
-        print(f"\n❌ Lỗi khi tải: {e}")
+        print(f"\n❌ Download error: {e}")
         return None
 
 
 def extract_chromedriver(zip_path):
-    """Giải nén ChromeDriver"""
+    """Extract ChromeDriver"""
     try:
-        print("📦 Đang giải nén...")
+        print("📦 Extracting...")
         
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            # Tìm file chromedriver.exe trong zip
+            # Find chromedriver.exe in zip
             for file in zip_ref.namelist():
                 if file.endswith('chromedriver.exe'):
-                    # Giải nén trực tiếp vào thư mục hiện tại
+                    # Extract directly to current directory
                     with zip_ref.open(file) as source:
                         with open('chromedriver.exe', 'wb') as target:
                             target.write(source.read())
-                    print("✅ Giải nén hoàn tất!")
+                    print("✅ Extraction complete!")
                     return True
         
-        print("❌ Không tìm thấy chromedriver.exe trong file zip")
+        print("❌ chromedriver.exe not found in zip file")
         return False
         
     except Exception as e:
-        print(f"❌ Lỗi khi giải nén: {e}")
+        print(f"❌ Extraction error: {e}")
         return False
     finally:
-        # Xóa file zip tạm
+        # Delete temporary zip file
         if os.path.exists(zip_path):
             os.remove(zip_path)
 
 
 def update_config():
-    """Cập nhật file config.json"""
+    """Update config.json file"""
     try:
         config_path = "config.json"
         
@@ -150,58 +150,58 @@ def update_config():
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
             
-            print("✅ Đã cập nhật config.json")
+            print("✅ config.json updated")
         else:
-            print("⚠️  Không tìm thấy config.json")
+            print("⚠️  config.json not found")
             
     except Exception as e:
-        print(f"⚠️  Lỗi khi cập nhật config: {e}")
+        print(f"⚠️  Error updating config: {e}")
 
 
 def main():
     print("=" * 60)
-    print("🚀 SCRIPT TỰ ĐỘNG TẢI CHROMEDRIVER")
+    print("🚀 AUTOMATED CHROMEDRIVER DOWNLOAD SCRIPT")
     print("=" * 60)
     print()
     
-    # Kiểm tra Chrome version
+    # Check Chrome version
     chrome_version = get_chrome_version()
-    print(f"✓ Phiên bản Chrome: {chrome_version}")
+    print(f"✓ Chrome version: {chrome_version}")
     print()
     
-    # Lấy URL download
+    # Get download URL
     url, driver_version = get_chromedriver_download_url(chrome_version)
     
     if not url:
-        print("❌ Không thể tìm URL download. Vui lòng tải thủ công từ:")
+        print("❌ Unable to find download URL. Please download manually from:")
         print("   https://googlechromelabs.github.io/chrome-for-testing/")
         return
     
-    print(f"✓ Tìm thấy ChromeDriver version: {driver_version}")
+    print(f"✓ Found ChromeDriver version: {driver_version}")
     print()
     
-    # Tải ChromeDriver
+    # Download ChromeDriver
     zip_path = download_chromedriver(url, driver_version)
     
     if not zip_path:
         return
     
-    # Giải nén
+    # Extract
     if extract_chromedriver(zip_path):
-        # Cập nhật config
+        # Update config
         update_config()
         
         print()
         print("=" * 60)
-        print("🎉 HOÀN TẤT!")
+        print("🎉 COMPLETE!")
         print("=" * 60)
-        print("✅ ChromeDriver đã được cài đặt tại: chromedriver.exe")
-        print("✅ config.json đã được cập nhật")
+        print("✅ ChromeDriver installed at: chromedriver.exe")
+        print("✅ config.json updated")
         print()
-        print("Bạn có thể chạy chương trình chính:")
+        print("You can now run the main program:")
         print("   python main.py")
     else:
-        print("❌ Cài đặt thất bại")
+        print("❌ Installation failed")
 
 
 if __name__ == "__main__":
