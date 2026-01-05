@@ -140,6 +140,51 @@ class SmartGoogleFormAutofill:
                         form_data.append(question_info)
                         continue
                     
+                    # Detect dropdown/select
+                    selects = question_elem.find_elements(By.CSS_SELECTOR, "select")
+                    if selects:
+                        question_info["type"] = "dropdown"
+                        select_elem = selects[0]
+                        options_elem = select_elem.find_elements(By.TAG_NAME, "option")
+                        for opt in options_elem:
+                            opt_text = opt.text.strip()
+                            if opt_text and opt_text.lower() != "choose":
+                                question_info["options"].append({
+                                    "text": opt_text,
+                                    "value": opt.get_attribute("value"),
+                                    "element": opt
+                                })
+                        form_data.append(question_info)
+                        continue
+                    
+                    # Detect date input
+                    date_inputs = question_elem.find_elements(By.CSS_SELECTOR, "input[type='date']")
+                    if date_inputs:
+                        question_info["type"] = "date"
+                        form_data.append(question_info)
+                        continue
+                    
+                    # Detect time input
+                    time_inputs = question_elem.find_elements(By.CSS_SELECTOR, "input[type='time']")
+                    if time_inputs:
+                        question_info["type"] = "time"
+                        form_data.append(question_info)
+                        continue
+                    
+                    # Detect number input
+                    number_inputs = question_elem.find_elements(By.CSS_SELECTOR, "input[type='number']")
+                    if number_inputs:
+                        question_info["type"] = "number"
+                        form_data.append(question_info)
+                        continue
+                    
+                    # Detect telephone input
+                    tel_inputs = question_elem.find_elements(By.CSS_SELECTOR, "input[type='tel']")
+                    if tel_inputs:
+                        question_info["type"] = "tel"
+                        form_data.append(question_info)
+                        continue
+                    
                 except Exception as e:
                     print(f"⚠ Error parsing Q{idx}: {type(e).__name__}")
                     continue
@@ -199,6 +244,64 @@ Choose appropriate options for consistency with previous answers.
 Respond with comma-separated numbers (e.g., "1,3,4").
 Only numbers, no explanation."""
             
+        elif question_type in ["scale", "matrix"]:
+            prompt = f"""You are filling out a Google Form intelligently.
+{context}
+Current Question: {question_text}
+
+This is a rating scale (1-5: 1=lowest, 5=highest).
+Choose an appropriate rating consistent with previous answers.
+Respond with ONLY the number.
+Generally prefer positive ratings (4-5) unless context suggests otherwise."""
+        
+        elif question_type == "dropdown":
+            options_text = "\n".join([f"{i+1}. {opt['text']}" for i, opt in enumerate(options)])
+            prompt = f"""You are filling out a Google Form intelligently.
+{context}
+Current Question: {question_text}
+
+Dropdown Options:
+{options_text}
+
+Choose the MOST APPROPRIATE option from the dropdown.
+Respond with ONLY the option number (1, 2, 3, etc.)."""
+        
+        elif question_type == "date":
+            prompt = f"""You are filling out a Google Form intelligently.
+{context}
+Current Question: {question_text}
+
+This is a date field. Provide a realistic date.
+Respond with ONLY the date in YYYY-MM-DD format (e.g., 2024-01-15).
+Choose a reasonable date relevant to the context if possible."""
+        
+        elif question_type == "time":
+            prompt = f"""You are filling out a Google Form intelligently.
+{context}
+Current Question: {question_text}
+
+This is a time field. Provide a realistic time.
+Respond with ONLY the time in HH:MM format using 24-hour time (e.g., 14:30).
+Choose a reasonable time relevant to the context if possible."""
+        
+        elif question_type == "number":
+            prompt = f"""You are filling out a Google Form intelligently.
+{context}
+Current Question: {question_text}
+
+This is a numeric field. Provide a realistic number.
+Respond with ONLY the number, no text.
+Choose a reasonable value relevant to the context if possible."""
+        
+        elif question_type == "tel":
+            prompt = f"""You are filling out a Google Form intelligently.
+{context}
+Current Question: {question_text}
+
+This is a telephone/phone number field. Provide a realistic phone number.
+Respond with ONLY the phone number in a standard format (e.g., +1-XXX-XXX-XXXX or XXXXXXXXXX).
+Choose a reasonable number relevant to the context if possible."""
+        
         elif question_type in ["scale", "matrix"]:
             prompt = f"""You are filling out a Google Form intelligently.
 {context}
@@ -347,6 +450,107 @@ Generally prefer positive ratings (4-5) unless context suggests otherwise."""
                         "type": "matrix"
                     })
                 return True
+            
+            elif question_info['type'] == 'dropdown':
+                choice = self.ask_gemini_for_choice(
+                    question_info['question'],
+                    question_info['options'],
+                    'dropdown'
+                )
+                if choice and choice.isdigit():
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(question_info['options']):
+                        select_elem = question_info['element'].find_element(By.CSS_SELECTOR, "select")
+                        from selenium.webdriver.support.select import Select
+                        Select(select_elem).select_by_index(idx)
+                        selected_text = question_info['options'][idx]['text']
+                        print(f"   ✓ Selected: {selected_text}")
+                        # Store in history
+                        self.answer_history.append({
+                            "question": question_info['question'],
+                            "answer": selected_text,
+                            "type": "dropdown"
+                        })
+                        time.sleep(0.5)
+                        return True
+            
+            elif question_info['type'] == 'date':
+                answer = self.ask_gemini_for_choice(
+                    question_info['question'],
+                    [],
+                    'date'
+                )
+                if answer:
+                    date_input = question_info['element'].find_element(By.CSS_SELECTOR, "input[type='date']")
+                    date_input.send_keys(answer)
+                    print(f"   ✓ Filled date: {answer}")
+                    # Store in history
+                    self.answer_history.append({
+                        "question": question_info['question'],
+                        "answer": answer,
+                        "type": "date"
+                    })
+                    time.sleep(0.5)
+                    return True
+            
+            elif question_info['type'] == 'time':
+                answer = self.ask_gemini_for_choice(
+                    question_info['question'],
+                    [],
+                    'time'
+                )
+                if answer:
+                    time_input = question_info['element'].find_element(By.CSS_SELECTOR, "input[type='time']")
+                    time_input.send_keys(answer)
+                    print(f"   ✓ Filled time: {answer}")
+                    # Store in history
+                    self.answer_history.append({
+                        "question": question_info['question'],
+                        "answer": answer,
+                        "type": "time"
+                    })
+                    time.sleep(0.5)
+                    return True
+            
+            elif question_info['type'] == 'number':
+                answer = self.ask_gemini_for_choice(
+                    question_info['question'],
+                    [],
+                    'number'
+                )
+                if answer:
+                    number_input = question_info['element'].find_element(By.CSS_SELECTOR, "input[type='number']")
+                    number_input.clear()
+                    number_input.send_keys(answer)
+                    print(f"   ✓ Filled number: {answer}")
+                    # Store in history
+                    self.answer_history.append({
+                        "question": question_info['question'],
+                        "answer": answer,
+                        "type": "number"
+                    })
+                    time.sleep(0.5)
+                    return True
+            
+            elif question_info['type'] == 'tel':
+                answer = self.ask_gemini_for_choice(
+                    question_info['question'],
+                    [],
+                    'tel'
+                )
+                if answer:
+                    tel_input = question_info['element'].find_element(By.CSS_SELECTOR, "input[type='tel']")
+                    tel_input.clear()
+                    tel_input.send_keys(answer)
+                    print(f"   ✓ Filled phone: {answer}")
+                    # Store in history
+                    self.answer_history.append({
+                        "question": question_info['question'],
+                        "answer": answer,
+                        "type": "tel"
+                    })
+                    time.sleep(0.5)
+                    return True
             
         except Exception as e:
             print(f"   ✗ Error: {str(e)[:100]}")
