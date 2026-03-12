@@ -23,8 +23,8 @@ pip install -r requirements.txt
 ```
 
 ### 2. Get ChromeDriver
-- Download from: https://chromedriver.chromium.org/
-- Extract and note the path
+- Recommended: you **don’t need to manually install ChromeDriver** (the tool auto-manages it).
+- If auto-management fails in your environment, install ChromeDriver manually and set `CHROMEDRIVER_PATH`.
 
 ### 3. Get Gemini API Key
 - Visit: https://makersuite.google.com/app/apikey
@@ -33,14 +33,23 @@ pip install -r requirements.txt
 
 ### 4. Configure
 
+You can configure via `config.json` and/or environment variables.
+
 Edit `config.json`:
 ```json
 {
   "gemini_api_key": "YOUR_GEMINI_API_KEY_HERE",
   "chromedriver_path": "path/to/chromedriver",
-  "wait_time": 2
+  "wait_time": 2,
+  "model_name": "gemini-2.5-flash"
 }
 ```
+
+Or use environment variables (they override `config.json`):
+
+- `GEMINI_API_KEY` – Gemini API key
+- `CHROMEDRIVER_PATH` – Path to ChromeDriver executable
+- `HEADLESS` – Set to `1`/`true` to run headless
 
 ## 🚀 Usage
 
@@ -49,6 +58,18 @@ python main.py
 ```
 
 Then enter the Google Form URL when prompted.
+
+### CLI (recommended)
+
+```bash
+python main.py --url "YOUR_FORM_URL" --headless
+```
+
+You can also pass a custom config path:
+
+```bash
+python main.py --config /path/to/config.json --url "YOUR_FORM_URL"
+```
 
 ## 📝 How It Works
 

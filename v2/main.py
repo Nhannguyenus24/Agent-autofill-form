@@ -3,7 +3,10 @@ Smart Google Form Autofill with Gemini AI - Version 2
 Auto-detects form structure and fills with AI-generated answers
 """
 
+import argparse
 import json
+import os
+import re
 import time
 import google.generativeai as genai
 from selenium import webdriver
@@ -16,20 +19,90 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 class SmartGoogleFormAutofill:
     """Smart form autofill using Gemini AI"""
     
-    def __init__(self, config_file='config.json'):
-        """Initialize with config file"""
-        with open(config_file, 'r', encoding='utf-8') as f:
-            self.config = json.load(f)
-        
-        genai.configure(api_key=self.config['gemini_api_key'])
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
-        
-        from selenium.webdriver.chrome.service import Service
-        service = Service(executable_path=self.config['chromedriver_path'])
-        self.driver = webdriver.Chrome(service=service)
+    def __init__(self, config_file='config.json', headless=False):
+        """Initialize with config file (env overrides supported)"""
+        # Resolve config path relative to this file so running from other dirs still works
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = config_file
+        if not os.path.isabs(config_path):
+            config_path = os.path.join(base_dir, config_file)
+
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                self.config = json.load(f)
+        except FileNotFoundError:
+            raise RuntimeError(f"Config file not found: {config_path}")
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Invalid JSON in config file {config_path}: {e}")
+
+        # Allow environment variables to override config for easier setup
+        api_key = os.getenv("GEMINI_API_KEY", self.config.get("gemini_api_key"))
+        if not api_key or api_key == "YOUR_GEMINI_API_KEY_HERE":
+            raise RuntimeError(
+                "Gemini API key is missing. Set GEMINI_API_KEY env var or update 'gemini_api_key' in config.json."
+            )
+
+        model_name = self.config.get("model_name", "gemini-2.5-flash")
+
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel(model_name)
+
+        chrome_options = webdriver.ChromeOptions()
+        if headless or str(os.getenv("HEADLESS", "")).lower() in {"1", "true", "yes"}:
+            chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+
+        # Prefer webdriver-manager for "just works" setup; fall back to explicit CHROMEDRIVER_PATH/config.
+        driver = None
+        try:
+            from selenium.webdriver.chrome.service import Service
+            from webdriver_manager.chrome import ChromeDriverManager
+
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        except Exception:
+            chromedriver_path = os.getenv("CHROMEDRIVER_PATH", self.config.get("chromedriver_path"))
+            if not chromedriver_path or chromedriver_path == "path/to/chromedriver":
+                raise RuntimeError(
+                    "ChromeDriver setup failed. Install ChromeDriver automatically by keeping webdriver-manager installed, "
+                    "or set CHROMEDRIVER_PATH env var (or 'chromedriver_path' in config.json)."
+                )
+            from selenium.webdriver.chrome.service import Service
+            service = Service(executable_path=chromedriver_path)
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+
+        self.driver = driver
         self.wait = WebDriverWait(self.driver, 10)
         self.form_structure = []
         self.answer_history = []  # Store Q&A pairs for context
+
+    @staticmethod
+    def _first_int(text: str):
+        if not text:
+            return None
+        m = re.search(r"\b(\d+)\b", text)
+        return int(m.group(1)) if m else None
+
+    @staticmethod
+    def _int_list(text: str):
+        if not text:
+            return []
+        nums = re.findall(r"\b(\d+)\b", text)
+        out = []
+        for n in nums:
+            try:
+                out.append(int(n))
+            except Exception:
+                continue
+        # preserve order, de-dupe
+        seen = set()
+        deduped = []
+        for n in out:
+            if n not in seen:
+                seen.add(n)
+                deduped.append(n)
+        return deduped
     
     def extract_form_structure(self):
         """Extract all questions and options from form"""
@@ -244,16 +317,6 @@ Choose appropriate options for consistency with previous answers.
 Respond with comma-separated numbers (e.g., "1,3,4").
 Only numbers, no explanation."""
             
-        elif question_type in ["scale", "matrix"]:
-            prompt = f"""You are filling out a Google Form intelligently.
-{context}
-Current Question: {question_text}
-
-This is a rating scale (1-5: 1=lowest, 5=highest).
-Choose an appropriate rating consistent with previous answers.
-Respond with ONLY the number.
-Generally prefer positive ratings (4-5) unless context suggests otherwise."""
-        
         elif question_type == "dropdown":
             options_text = "\n".join([f"{i+1}. {opt['text']}" for i, opt in enumerate(options)])
             prompt = f"""You are filling out a Google Form intelligently.
@@ -302,22 +365,12 @@ This is a telephone/phone number field. Provide a realistic phone number.
 Respond with ONLY the phone number in a standard format (e.g., +1-XXX-XXX-XXXX or XXXXXXXXXX).
 Choose a reasonable number relevant to the context if possible."""
         
-        elif question_type in ["scale", "matrix"]:
-            prompt = f"""You are filling out a Google Form intelligently.
-{context}
-Current Question: {question_text}
-
-This is a rating scale (1-5: 1=lowest, 5=highest).
-Choose an appropriate rating consistent with previous answers.
-Respond with ONLY the number.
-Generally prefer positive ratings (4-5) unless context suggests otherwise."""
-        
         else:
             return None
         
         try:
             response = self.model.generate_content(prompt)
-            answer = response.text.strip()
+            answer = (response.text or "").strip()
             print(f"   🤖 Gemini: {answer}")
             return answer
         except Exception as e:
@@ -376,8 +429,9 @@ Generally prefer positive ratings (4-5) unless context suggests otherwise."""
                     question_info['options'],
                     'radio'
                 )
-                if choice and choice.isdigit():
-                    idx = int(choice) - 1
+                idx_choice = self._first_int(choice) if choice else None
+                if idx_choice is not None:
+                    idx = idx_choice - 1
                     if 0 <= idx < len(question_info['options']):
                         selected_option = question_info['options'][idx]
                         selected_option['element'].click()
@@ -399,15 +453,13 @@ Generally prefer positive ratings (4-5) unless context suggests otherwise."""
                 )
                 if choices:
                     selected = []
-                    for choice in choices.split(','):
-                        choice = choice.strip()
-                        if choice.isdigit():
-                            idx = int(choice) - 1
-                            if 0 <= idx < len(question_info['options']):
-                                selected_option = question_info['options'][idx]
-                                selected_option['element'].click()
-                                selected.append(selected_option['text'])
-                                time.sleep(0.3)
+                    for n in self._int_list(choices):
+                        idx = n - 1
+                        if 0 <= idx < len(question_info['options']):
+                            selected_option = question_info['options'][idx]
+                            selected_option['element'].click()
+                            selected.append(selected_option['text'])
+                            time.sleep(0.3)
                     
                     if selected:
                         print(f"   ✓ Selected: {', '.join(selected)}")
@@ -431,12 +483,13 @@ Generally prefer positive ratings (4-5) unless context suggests otherwise."""
                             'scale'
                         )
                         
-                        if rating and rating.isdigit():
-                            idx = int(rating) - 1
+                        rating_num = self._first_int(rating) if rating else None
+                        if rating_num is not None:
+                            idx = rating_num - 1
                             if 0 <= idx < len(row['options']):
                                 row['options'][idx].click()
-                                print(f"   ✓ Row {row_idx}: {row['label'][:40]} → {rating}")
-                                ratings.append(f"{row['label']}: {rating}")
+                                print(f"   ✓ Row {row_idx}: {row['label'][:40]} → {rating_num}")
+                                ratings.append(f"{row['label']}: {rating_num}")
                                 time.sleep(0.3)
                         
                     except Exception as e:
@@ -457,8 +510,9 @@ Generally prefer positive ratings (4-5) unless context suggests otherwise."""
                     question_info['options'],
                     'dropdown'
                 )
-                if choice and choice.isdigit():
-                    idx = int(choice) - 1
+                idx_choice = self._first_int(choice) if choice else None
+                if idx_choice is not None:
+                    idx = idx_choice - 1
                     if 0 <= idx < len(question_info['options']):
                         select_elem = question_info['element'].find_element(By.CSS_SELECTOR, "select")
                         from selenium.webdriver.support.select import Select
@@ -694,7 +748,7 @@ Generally prefer positive ratings (4-5) unless context suggests otherwise."""
 
 
 def main():
-    """Main function"""
+    """Main function: simple CLI entrypoint"""
     print("=" * 60)
     print("🤖 SMART GOOGLE FORM AUTOFILL V2")
     print("=" * 60)
@@ -704,13 +758,23 @@ def main():
     print("  • No manual configuration needed")
     print("=" * 60)
     
-    form_url = input("\n📝 Enter Google Form URL: ").strip()
+    parser = argparse.ArgumentParser(description="Smart Google Form Autofill V2")
+    parser.add_argument("--url", help="Google Form URL")
+    parser.add_argument("--config", default="config.json", help="Path to config.json (default: config.json next to script)")
+    parser.add_argument("--headless", action="store_true", help="Run Chrome headless")
+    args = parser.parse_args()
+
+    form_url = (args.url or input("\n📝 Enter Google Form URL: ")).strip()
     
     if not form_url:
         print("❌ No URL provided")
         return
     
-    autofill = SmartGoogleFormAutofill()
+    try:
+        autofill = SmartGoogleFormAutofill(config_file=args.config, headless=args.headless)
+    except RuntimeError as e:
+        print(f"\n❌ Configuration error: {e}")
+        return
     
     try:
         autofill.fill_form_smart(form_url)
